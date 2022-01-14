@@ -1,0 +1,77 @@
+version: '3.7'
+services:
+  init:
+    image: busybox:latest
+    command: "chown 1000:1000 /data /agent"
+    volumes:
+      - ./data/jenkins_home:/data
+      - ./data/agent:/agent
+    restart: 'no'
+
+  nginx-proxy:
+    image: nginx
+    hostname: nginx-proxy
+    container_name: nginx-proxy
+    volumes:
+      - ./jenkins.conf:/etc/nginx/conf.d/jenkins.conf:ro
+      - ./data/nginx/ssl:/etc/ssl:ro
+    command: ["nginx", "-g", "daemon off;"]
+    restart: always
+    ports:
+      - '443:443'
+      - '80:80'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  jenkins-master:
+    image: jenkins/jenkins:lts
+    build:
+      context: ./dockerfile
+      dockerfile: jenkins
+    container_name: jenkins-master
+    hostname: jenkins-master
+    restart: always
+    environment:
+      JAVA_OPTS: "-Dsun.jnu.encoding=UTF-8 -Dfile.encoding=UTF-8 -Djava.awt.headless=true -Xms1g -Xmx2g"
+      JENKINS_ADMIN_ID: admin
+      JENKINS_ADMIN_PW: 1qaz2wsx
+    volumes:
+      - ./data/jenkins_home:/var/jenkins_home
+    ports:
+      - 8080
+      - 50000
+    depends_on:
+      - init
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  jenkins-agent:
+    image: jenkins-agent:latest
+    build:
+      context: ./dockerfile
+      dockerfile: agent
+    container_name: jenkins-agent
+    hostname: jenkins-agent
+    restart: always
+    volumes:
+      - ./data/agent:/home/jenkins/agent
+    depends_on:
+    - init
+    - jenkins-master
+    environment:
+      JAVA_OPTS: "-Dsun.jnu.encoding=UTF-8 -Dfile.encoding=UTF-8 -Djava.awt.headless=true -Xms512m -Xmx1g"
+      JENKINS_URL: http://jenkins-master:8080
+      JENKINS_SECRET: 64e74b5a1bdc320dc4b2eb2ae90747aa86ad0a7e65f9633d8679ce9a18c47247
+      JENKINS_AGENT_NAME: agent
+      JENKINS_AGENT_WORKDIR: /home/jenkins/agent
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"

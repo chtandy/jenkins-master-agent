@@ -1,0 +1,55 @@
+FROM jenkins/jenkins:lts
+MAINTAINER cht.andy@gmail.com
+ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
+ARG DEBIAN_FRONTEND=noninteractive
+ARG TZ=Asia/Taipei
+USER root
+
+RUN set -eux \
+  && echo "######### dash > bash ##########" \
+  && mv /bin/sh /bin/sh.old && ln -s /bin/bash /bin/sh
+
+RUN set -eux \
+  && echo "######### apt install locales and timezone ##########" \
+  && apt-get update && apt-get install --assume-yes locales tzdata bash-completion \
+  && rm -rf /var/lib/apt/lists/* && apt-get clean \
+  && ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime && echo ${TZ} > /etc/timezone
+
+## 可用docker-compose.yml 的環境變數啟用JENKINS_OPTS
+## 若要啟用https
+## 環境內若有firewall 或是nginx 做導轉，則不需要額外設定，使用預設的8080即可
+#ENV JENKINS_OPTS --httpPort=8080 --httpsPort=8083
+## 可用docker-compose.yml 的環境變數啟用JENKINS_SLAVE_AGENT_PORT
+## 更改 Jenkins 的gent 默認代理端口 
+#ENV JENKINS_SLAVE_AGENT_PORT 50001
+#ENV JENKINS_OPTS --httpPort=-1 --httpsPort=8083 --httpsCertificate=/var/jenkins_home/ssl/ssl.crt --httpsPrivateKey=/var/jenkins_home/ssl/server.key
+## 設定初始帳號
+## set-user-security.groovy
+RUN { \
+    echo "import hudson.security.*"; \ 
+    echo "import jenkins.model.*"; \
+    echo "def instance = Jenkins.getInstance()"; \
+    echo "def adminID = System.getenv(\"JENKINS_ADMIN_ID\")"; \
+    echo "def adminPW = System.getenv(\"JENKINS_ADMIN_PW\")"; \
+    echo "def hudsonRealm = new HudsonPrivateSecurityRealm(false)"; \
+    echo "hudsonRealm.createAccount(adminID, adminPW)"; \
+    echo "instance.setSecurityRealm(hudsonRealm)"; \
+    echo "def strategy = new FullControlOnceLoggedInAuthorizationStrategy()"; \
+    echo "strategy.setAllowAnonymousRead(false)"; \
+    echo "instance.setAuthorizationStrategy(strategy)"; \
+    echo "instance.save()"; \
+    }  > /usr/share/jenkins/ref/init.groovy.d/set-user-security.groovy 
+
+# 啟用jenkins 使用root 權限
+RUN echo "jenkins ALL=NOPASSWD: ALL" >> /etc/sudoers
+USER jenkins
+
+# jenkins install plugin
+RUN set -ex \
+  && jenkins-plugin-cli --plugins \
+  cloudbees-folder antisamy-markup-formatter build-timeout credentials-binding timestamper \
+  ws-cleanup ant-in-workspace gradle workflow-aggregator github-branch-source pipeline-github-lib \
+  pipeline-stage-view git subversion ssh-slaves matrix-auth pam-auth ldap email-ext mailer \
+  role-strategy gitlab-plugin authorize-project generic-webhook-trigger ssh-agent ansicolor \
+  ansible python docker-workflow
+

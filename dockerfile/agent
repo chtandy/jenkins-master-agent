@@ -1,0 +1,41 @@
+# refer https://hub.docker.com/r/jenkins/inbound-agent
+# refer https://github.com/jenkinsci/docker-inbound-agent
+#FROM jenkins/jnlp-slave
+FROM jenkins/inbound-agent
+ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
+ARG DEBIAN_FRONTEND=noninteractive
+ARG TZ=Asia/Taipei
+USER root
+
+## 變更預設的dash 為bash
+RUN set -eux \
+  && echo "######### dash > bash ##########" \
+  && mv /bin/sh /bin/sh.old && ln -s /bin/bash /bin/sh
+
+## 安裝locales 與預設語系
+RUN set -eux \
+  && echo "######### apt install locales and timezone ##########" \
+  && apt-get update && apt-get install --assume-yes locales tzdata bash-completion \
+  && rm -rf /var/lib/apt/lists/* && apt-get clean \
+  && ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime && echo ${TZ} > /etc/timezone
+
+## 安裝常用工具
+RUN apt-get update && apt-get install --assume-yes curl wget vim sudo jq git \
+  && rm -rf /var/lib/apt/lists/* && apt-get clean
+
+## 忽略第一次ssh host 的訊息
+RUN set -x \
+  && { \
+     echo "    StrictHostKeyChecking no"; \
+     echo "    UserKnownHostsFile /dev/null"; \
+     } >> /etc/ssh/ssh_config
+
+RUN echo "jenkins ALL=NOPASSWD: ALL" >> /etc/sudoers
+
+## install kubectl client
+RUN echo "######### install kubectl cli ##########" \
+  && curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl" \
+  && chmod +x ./kubectl \
+  && mv ./kubectl /usr/bin/kubectl
+
+USER jenkins
