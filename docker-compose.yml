@@ -42,9 +42,9 @@ services:
       JENKINS_ADMIN_PW: 1qaz2wsx
     volumes:
       - ./data/jenkins_home:/var/jenkins_home
-    ports:
-      - 8080
-      - 50000
+    #ports:
+    #  - 8080
+    #  - 50000
     depends_on:
       - init
     logging:
